@@ -3156,7 +3156,7 @@ async function cloudInit2() {
       const zmena = (novy ? novy.id : "") !== (cloud.uzivatel ? cloud.uzivatel.id : "");
       cloud.uzivatel = novy;
       const potvrzeno = uvodPriUdalosti(udalost, novy);
-      if (novy && (potvrzeno || platnyLogin())) cloudOdber();
+      if (novy && (potvrzeno || platnyLogin())) { cloudOdber(); setTimeout(busyAuto, 800); }
       else if (!novy) cloudOdberZrus();
       if (zmena || potvrzeno) {
         cloud.pozastaveno = false;
@@ -3585,13 +3585,19 @@ function parsujIcsBusy(text) {
   return { busy: busy, neumi: neumi, cizich: cizich };
 }
 
-function importujBusy(text) {
-  if (String(text).indexOf("BEGIN:VCALENDAR") === -1) { alert("Tohle nevypadá jako kalendář (.ics)."); return false; }
+function importujBusy(text, tichy) {
+  if (String(text).indexOf("BEGIN:VCALENDAR") === -1) { if (!tichy) alert("Tohle nevypadá jako kalendář (.ics)."); return false; }
   const v = parsujIcsBusy(text);
   meta.busy.udalosti = v.busy;
   meta.busy.aktualizace = nyniKlic();
+  cloud.busyChyba = "";
+  cloud.blok = true;   // obsazenost zůstává jen v zařízení, nemá se kvůli ní synchronizovat cloud
   uloz();
-  vykresli();
+  cloud.blok = false;
+  const a = document.activeElement;
+  const pise = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+  if (!tichy || !pise) vykresli();
+  if (tichy) return true;
   let zprava = "Načteno " + v.busy.length + " bloků, kdy máš obsazeno";
   if (v.neumi) zprava += " (" + v.neumi + " složitých opakování jsem přeskočil)";
   if (v.cizich) zprava += " – pozor, " + v.cizich + " událostí je v jiném časovém pásmu";
@@ -3599,19 +3605,50 @@ function importujBusy(text) {
   return true;
 }
 
-async function nactiBusyZUrl(url) {
-  url = String(url).trim().replace(/^webcals?:\/\//i, "https://");
-  if (!/^https:\/\//i.test(url)) { alert("Odkaz musí začínat https:// nebo webcal://."); return; }
-  meta.busy.url = url;
-  uloz();
+// Stažení kalendáře: nejdřív přes vlastní funkci „kalendar“ v Supabase (obchází omezení prohlížeče), pak napřímo
+async function stahniIcs(url) {
+  if (cloud.klient && cloud.uzivatel && !lokalniRezim() && platnyLogin() && cloud.klient.functions) {
+    try {
+      const r = await cloud.klient.functions.invoke("kalendar", { body: { url: url } });
+      let d = r && r.data;
+      if (d && typeof d !== "string" && typeof d.text === "function") d = await d.text();
+      if (!r.error && typeof d === "string" && d.indexOf("BEGIN:VCALENDAR") !== -1) return d;
+      cloud.busyChyba = "Funkce „kalendar“ v Supabase neodpověděla správně" + (r && r.error ? " (" + (r.error.message || r.error) + ")" : "") + ".";
+    } catch (e) { cloud.busyChyba = "Funkce „kalendar“ v Supabase není dostupná."; }
+  }
   try {
     const odp = await fetch(url);
-    if (!odp.ok) throw new Error("HTTP " + odp.status);
-    importujBusy(await odp.text());
-  } catch (e) {
-    alert("Prohlížeč si odkaz sám stáhnout nedovolil (Outlook to běžně blokuje).\n\nOtevři odkaz tlačítkem „Otevřít odkaz“, stažený soubor .ics si ulož a načti ho tlačítkem „Načíst ze souboru“.");
-  }
+    if (odp.ok) return await odp.text();
+  } catch (e) {}
+  return null;
 }
+
+async function nactiBusyZUrl(url, tichy) {
+  url = String(url).trim().replace(/^webcals?:\/\//i, "https://");
+  if (!/^https:\/\//i.test(url)) { if (!tichy) alert("Odkaz musí začínat https:// nebo webcal://."); return; }
+  url = url.replace(/calendar\.html(\?.*)?$/i, "calendar.ics");   // odkaz HTML se změní na ICS (HTML je jen pro prohlížení)
+  if (meta.busy.url !== url) { meta.busy.url = url; cloud.blok = true; uloz(); cloud.blok = false; }
+  const text = await stahniIcs(url);
+  if (text === null) {
+    if (!tichy) alert("Kalendář se nepodařilo stáhnout automaticky (Outlook to z prohlížeče často blokuje).\n\nNastav funkci „kalendar“ v Supabase podle návodu, nebo odkaz otevři tlačítkem „Otevřít odkaz“, stažený soubor .ics ulož a načti ho tlačítkem „Načíst ze souboru“.");
+    else { cloud.busyChyba = cloud.busyChyba || "Automatická aktualizace kalendáře se nepovedla."; if (pohled === "nastaveni") cloudStav(cloud.stav); }
+    return;
+  }
+  importujBusy(text, tichy);
+}
+
+// Automatická aktualizace obsazenosti: při startu, po návratu do aplikace a každých pár minut (nejvýš jednou za 10 min)
+let busyBezi = false;
+async function busyAuto(sila) {
+  if (busyBezi || !meta.busy.url || document.hidden) return;
+  const stari = meta.busy.aktualizace ? Date.now() - new Date(meta.busy.aktualizace.replace(" ", "T")).getTime() : Infinity;
+  if (!sila && stari < 10 * 60000) return;
+  busyBezi = true;
+  try { await nactiBusyZUrl(meta.busy.url, true); } finally { busyBezi = false; }
+}
+document.addEventListener("visibilitychange", function () { if (!document.hidden) busyAuto(); });
+window.addEventListener("focus", function () { busyAuto(); });
+setInterval(busyAuto, 5 * 60000);
 
 /* =====================  NASTAVENÍ  ===================== */
 function pouzijTema() { document.documentElement.setAttribute("data-tema", tema); }
@@ -3683,7 +3720,7 @@ function kartaOutlookBusy() {
   const bOtevri = el("button", "Otevřít odkaz", "", "btn");
   bOtevri.onclick = function () {
     const u = url.value.trim().replace(/^webcals?:\/\//i, "https://");
-    if (/^https:\/\//i.test(u)) window.open(u, "_blank");
+    if (/^https:\/\//i.test(u)) window.open(u.replace(/calendar\.html(\?.*)?$/i, "calendar.ics"), "_blank");
   };
   const soubor = el("input");
   soubor.type = "file";
@@ -3703,7 +3740,7 @@ function kartaOutlookBusy() {
   k.appendChild(r);
 
   const stav = meta.busy.udalosti.length
-    ? "Načteno " + meta.busy.udalosti.length + " obsazených bloků · aktualizováno " + meta.busy.aktualizace.replace(" ", " v ")
+    ? "Načteno " + meta.busy.udalosti.length + " obsazených bloků · aktualizováno " + meta.busy.aktualizace.replace(" ", " v ") + (meta.busy.url ? " · aktualizuje se samo" : "")
     : "Zatím nic nenačteno.";
   k.appendChild(el("div", stav, "font-size:14px;color:var(--sedy);margin-top:10px"));
   if (meta.busy.udalosti.length) {
@@ -3895,6 +3932,7 @@ pouzijTema();
 vykresli();
 uvodStart();
 cloudInit();
+setTimeout(busyAuto, 2500);
 </script>
 
 </body></html>
