@@ -1,11 +1,4 @@
-<!doctype html>
-<html lang="cs">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Moje úkoly</title>
-</head>
-<body>
+<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Moje úkoly</title></head><body>
 <style>
 :root {
   --bg:#f2f2f7; --karta:#fff; --text:#000; --sedy:#6d6d72; --sedy2:#8e8e93; --pole:#f2f2f7;
@@ -77,6 +70,9 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 50%; }
 .tah { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: grab; }
 .drop-cil { outline: 2px dashed var(--akcent); outline-offset: -2px; }
 
+#uvod { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg); z-index: 3000; align-items: center; justify-content: center; padding: 20px; overflow-y: auto; }
+#uvod.otevreno { display: flex; }
+.uvod-box { width: 100%; max-width: 380px; text-align: center; }
 #sheet { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.45); z-index: 1000; align-items: flex-end; justify-content: center; }
 #sheet.otevreno { display: flex; }
 .sheet-panel { background: var(--bg); width: 100%; max-width: 620px; max-height: 92vh; overflow-y: auto; border-radius: 16px 16px 0 0; -webkit-overflow-scrolling: touch; }
@@ -115,13 +111,12 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 50%; }
   <div id="rychlyNahled" class="nahled"></div>
 
   <div class="segment hlavni">
-    <button id="btnPrehled">Přehled</button>
     <button id="btnPlan">Plán</button>
     <button id="btnInbox">Inbox</button>
     <button id="btnSeznam">Seznam</button>
     <button id="btnKalendar">Kalendář</button>
     <button id="btnRevize">Revize</button>
-    <button id="btnNastaveni">⚙︎</button>
+    <button id="btnNastaveni">Nastavení</button>
   </div>
 
   <input id="hledat" type="search" class="pole" placeholder="🔍 Hledat v akcích…">
@@ -133,8 +128,6 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 50%; }
 
   <div id="vysledky"></div>
 
-  <div id="prehledPohled"><div id="prehled"></div></div>
-
   <div id="seznamPohled">
     <div class="karta" style="padding:14px">
       <div class="popisek">Nová oblast zájmu</div>
@@ -142,6 +135,11 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 50%; }
         <input id="nazevOblasti" class="pole" placeholder="Název oblasti" style="margin:0">
         <input id="barvaOblasti" type="color" class="barva-kolo" value="#007aff">
         <button id="pridatOblast" class="btn-plny" style="margin:0">Přidat</button>
+      </div>
+      <div class="popisek" style="margin:12px 0 6px">Typ oblasti (povinný) – podle něj se akce plánují</div>
+      <div id="typNoveOblasti" class="segment mala" style="margin:0">
+        <button type="button" data-typ="prac">💼 Pracovní</button>
+        <button type="button" data-typ="soukr">🏠 Soukromá</button>
       </div>
     </div>
     <div id="oblasti"></div>
@@ -155,6 +153,16 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 50%; }
   <div id="nastaveniPohled"><div id="nastaveni"></div></div>
 </div>
 
+<div id="uvod">
+  <div class="uvod-box">
+    <div style="font-size:56px;line-height:1">✅</div>
+    <h1 style="margin:10px 0 6px">Moje úkoly</h1>
+    <div id="uvodText" style="color:var(--sedy);margin-bottom:22px">Pro vstup do aplikace se přihlas přes Google.</div>
+    <button id="uvodGoogle" class="btn-plny" style="display:block;width:100%;margin:0 0 10px;font-size:18px;padding:14px">Přihlásit přes Google</button>
+    <button id="uvodOffline" class="btn" style="display:none;width:100%;color:var(--sedy)">Pokračovat bez přihlášení (jen v tomto zařízení)</button>
+    <div id="uvodChyba" style="color:var(--cerv);font-size:14px;margin-top:10px"></div>
+  </div>
+</div>
 <div id="sheet"></div>
 <div id="toast"></div>
 
@@ -164,12 +172,12 @@ let oblasti = [];
 try { oblasti = JSON.parse(localStorage.getItem("oblasti") || "[]"); } catch (e) { oblasti = []; }
 if (!Array.isArray(oblasti)) oblasti = [];
 
-let otevrena = null;      // právě otevřená oblast (vždy jedna)
+let otevrene = [];       // oblasti rozbalené v Seznamu (výchozí stav: všechny sbalené)
 let filtrPriorita = "";   // "" = všechny priority
 let formProjekt = null;   // oblast, u které je otevřený formulář nového projektu
 let prejmenovani = null;  // oblast nebo projekt, který se právě přejmenovává
 let editor = null;        // stav okna pro úpravu akce
-let pohled = "prehled";   // prehled | seznam | kalendar | nastaveni
+let pohled = "plan";      // plan | inbox | seznam | kalendar | revize | nastaveni
 let kalPohled = "mesic";  // mesic | tyden | den
 let kDen = dnesKlic();    // referenční den kalendáře
 let vybranyDen = kDen;    // vybraný den v měsíčním pohledu
@@ -188,10 +196,10 @@ let nidCislo = 0;
    Project URL a klíč „anon public“ najdeš v Supabase: Project Settings → API.
    Klíč anon je určený pro veřejné stránky – data chrání pravidla (RLS) v databázi.
    NIKDY sem nevkládej klíč service_role. */
-const CLOUD_URL = "https://kcsabnmquomreypzscpy.supabase.co";   // např. "https://abcdefgh.supabase.co"
-const CLOUD_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtjc2Fibm1xdW9tcmV5cHpzY3B5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NDA4NDcsImV4cCI6MjEwNzIxNjg0N30.Is4TVQpBVXFFDiRScu4Kd1drPe7DquiFKcdYYOK0q8Q";   // dlouhý text začínající eyJ… nebo sb_publishable_…
+const CLOUD_URL = "https://kcsabnmquomreypzscpy.supabase.co";
+const CLOUD_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtjc2Fibm1xdW9tcmV5cHpzY3B5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NDA4NDcsImV4cCI6MjEwNzIxNjg0N30.Is4TVQpBVXFFDiRScu4Kd1drPe7DquiFKcdYYOK0q8Q";
 const CLOUD_ZAKODOVANO = !!(CLOUD_URL && CLOUD_KEY);
-const LOGIN_ODSTUP_DNI = 14;   // jak často se po „Teď ne“ znovu zeptat na přihlášení
+const LOGIN_PLATNOST_DNI = 7;   // po kolika dnech se na zařízení vyžaduje nové přihlášení přes Google
 
 let cloud = { nastaveni: { url: CLOUD_URL, key: CLOUD_KEY }, klient: null, uzivatel: null, stav: "", verze: 0, bezi: false, znovu: false, timer: null, blok: false, pozastaveno: false };
 try {
@@ -237,6 +245,7 @@ function ulozSablony() { try { localStorage.setItem("sablony", JSON.stringify(sa
 function vychoziMeta() {
   return {
     prac: { od: "08:00", do: "17:00" },
+    den: { od: "07:00", do: "22:00" },
     energie: { den: "", uroven: "" },
     mit: {},
     uzavreno: "",
@@ -250,6 +259,7 @@ function slucMeta(m) {
   const v = vychoziMeta();
   if (!m || typeof m !== "object") return v;
   if (m.prac && m.prac.od && m.prac.do) v.prac = { od: m.prac.od, do: m.prac.do };
+  if (m.den && m.den.od && m.den.do && m.den.od < m.den.do) v.den = { od: m.den.od, do: m.den.do };
   if (m.energie && typeof m.energie === "object") v.energie = { den: m.energie.den || "", uroven: m.energie.uroven || "" };
   if (m.mit && typeof m.mit === "object") v.mit = m.mit;
   if (typeof m.uzavreno === "string") v.uzavreno = m.uzavreno;
@@ -295,8 +305,10 @@ function normalizuj() {
     if (!o.projekty) o.projekty = [];
     if (!o.barva) o.barva = "#007aff";
     o.cil = Number(o.cil) > 0 ? Number(o.cil) : 0;
-    o.pracovni = !!o.pracovni;
     o.inbox = !!o.inbox;
+    if (o.inbox) o.typ = "";
+    else if (o.typ !== "prac" && o.typ !== "soukr") o.typ = o.pracovni ? "prac" : "soukr";
+    o.pracovni = o.typ === "prac";
     o.projekty.forEach(function (p) {
       if (!p.ukoly) p.ukoly = [];
       if (!p.priorita) p.priorita = "Střední";
@@ -322,7 +334,7 @@ function normalizuj() {
   });
   let ib = oblasti.find(function (o) { return o.inbox; });
   if (!ib) {
-    ib = { nazev: "📥 Inbox", barva: "#8e8e93", cil: 0, pracovni: false, inbox: true, projekty: [] };
+    ib = { nazev: "📥 Inbox", barva: "#8e8e93", cil: 0, typ: "", pracovni: false, inbox: true, projekty: [] };
     oblasti.unshift(ib);
   }
   oblasti.forEach(function (o) { if (o !== ib) o.inbox = false; });
@@ -628,21 +640,92 @@ function varovani(d, vynech, o) {
       if (s < b.do && b.od < e) w.push("Kolize s Outlookem (obsazeno " + cas(b.od) + "–" + cas(Math.min(b.do, 1439)) + ").");
     });
   }
-  if (d.termin && !d.hotovo && !d.ceka && trvani(d) > 0) {
-    const celkem = planDne(d.termin, vynech) + trvani(d);
-    const volno = volnoDne(d.termin);
+  const typ = typOblasti(o);
+  if (d.termin && !d.hotovo && !d.ceka && trvani(d) > 0 && !(typ === "prac" && jeVikend(d.termin))) {
+    const t = typ || undefined;
+    const celkem = planDne(d.termin, vynech, t) + trvani(d);
+    const volno = volnoDne(d.termin, typ);
     if (celkem > volno) {
-      w.push("Na " + datumCz(d.termin) + " bude naplánováno " + fmtMin(celkem) +", ale volno je jen " + fmtMin(volno) + ".");
+      w.push("Na " + datumCz(d.termin) + " bude " + (typ ? typPopis(typ) + "ch " : "") + "akcí naplánováno " + fmtMin(celkem) + ", ale volno je jen " + fmtMin(volno) + ".");
     }
   }
-  if (o && o.pracovni && d.termin && !d.hotovo) {
-    const den = parseKlic(d.termin).getDay();
-    if (den === 0 || den === 6) w.push("Pracovní akce je naplánovaná na víkend.");
+  if (typ && d.termin && !d.hotovo && !jeOpak(d)) {
+    if (typ === "prac" && jeVikend(d.termin)) w.push("Pracovní akce je naplánovaná na víkend.");
     else if (d.zacatek) {
-      const ok = oknoPrace();
-      const konec = d.konec ? minuty(d.konec) : minuty(d.zacatek);
-      if (minuty(d.zacatek) < ok[0] || konec > ok[1]) w.push("Pracovní akce je mimo pracovní dobu (" + meta.prac.od + "–" + meta.prac.do + ").");
+      const s = minuty(d.zacatek);
+      const e = d.konec ? minuty(d.konec) : s + (d.odhad || 0);
+      const pr = oknoPrace();
+      if (typ === "prac" && (s < pr[0] || e > pr[1])) w.push("Pracovní akce je mimo pracovní dobu (" + meta.prac.od + "–" + meta.prac.do + ").");
+      if (typ === "soukr" && !jeVikend(d.termin) && s < pr[1] && pr[0] < Math.max(e, s + 1)) w.push("Soukromá akce zasahuje do pracovní doby (" + meta.prac.od + "–" + meta.prac.do + ").");
     }
+  }
+  posloupnost(d).forEach(function (t) { w.push(t); });
+  return w;
+}
+
+// --- časová posloupnost: akce po sobě musí logicky navazovat (včetně čekání na někoho) ---
+function konecAkce(u) {
+  let den = u.termin || "", c = "";
+  if (u.zacatek) c = u.konec ? u.konec : cas(Math.min(minuty(u.zacatek) + (u.odhad || 0), 1439));
+  if (u.ceka && u.ceka.pripomenout && u.ceka.pripomenout > den) { den = u.ceka.pripomenout; c = ""; }
+  return { den: den, c: c };
+}
+
+function nasledovnici(id) {
+  const v = [];
+  oblasti.forEach(function (o) { o.projekty.forEach(function (p) { p.ukoly.forEach(function (b) {
+    if (b.po === id && b.id !== id) v.push(b);
+  }); }); });
+  return v;
+}
+
+function posloupnost(d) {
+  const w = [];
+  if (jeOpak(d)) return w;
+  const popis = function (a) { return "„" + a.text + "“"; };
+  // 1) předchozí akce (a jejich předchůdci)
+  const videno = {};
+  let id = d.po, hloubka = 0;
+  while (id && !videno[id] && hloubka < 20) {
+    videno[id] = true; hloubka++;
+    const n = najdiAkci(id);
+    if (!n || n.u.id === d.id) break;
+    const a = n.u;
+    if (!a.hotovo) {
+      if (d.hotovo) w.push("Akce je označená jako hotová, ale předchozí akce " + popis(a) + " ještě hotová není.");
+      if (jeOpak(a)) w.push("Předchozí akce " + popis(a) + " se opakuje, takže nikdy není definitivně hotová – návaznost nedává smysl.");
+      else if (d.termin && !d.hotovo) {
+        const e = konecAkce(a);
+        const ceka = a.ceka ? " (čeká se na " + (a.ceka.kdo || "někoho") + (a.ceka.pripomenout ? ", připomenutí " + datumCz(a.ceka.pripomenout) : "") + ")" : "";
+        if (e.den && d.termin < e.den) w.push("Akce začíná dřív (" + datumCz(d.termin) + "), než skončí předchozí akce " + popis(a) + " (" + datumCz(e.den) + ")" + ceka + ".");
+        else if (e.den && d.termin === e.den && e.c && d.zacatek && d.zacatek < e.c) w.push("Akce začíná v " + d.zacatek + ", ale předchozí akce " + popis(a) + " končí až v " + e.c + ".");
+        else if (!e.den && a.ceka) w.push("Předchozí akce " + popis(a) + " čeká na " + (a.ceka.kdo || "někoho") + " a nemá žádný termín – nelze ověřit, že stihneš termín této akce.");
+      }
+    }
+    id = a.po;
+  }
+  // 2) navazující akce (i nepřímo)
+  if (d.id && !d.hotovo) {
+    const fronta = [d.id], navstiveno = {};
+    const e = konecAkce(d);
+    let pocet = 0;
+    while (fronta.length && pocet < 30) {
+      const cur = fronta.shift();
+      if (navstiveno[cur]) continue;
+      navstiveno[cur] = true;
+      nasledovnici(cur).forEach(function (b) {
+        pocet++;
+        fronta.push(b.id);
+        if (b.hotovo || jeOpak(b) || !b.termin || !e.den) return;
+        if (b.termin < e.den) w.push("Navazující akce " + popis(b) + " je naplánovaná na " + datumCz(b.termin) + ", tedy dřív, než tato akce skončí (" + datumCz(e.den) + ").");
+        else if (b.termin === e.den && e.c && b.zacatek && b.zacatek < e.c) w.push("Navazující akce " + popis(b) + " začíná v " + b.zacatek + ", ale tato akce končí až v " + e.c + ".");
+      });
+    }
+  }
+  // 3) vlastní čekání
+  if (d.ceka && d.termin && !d.hotovo) {
+    if (d.ceka.od && d.termin < d.ceka.od) w.push("Termín akce je dřív, než začalo čekání (od " + datumCz(d.ceka.od) + ").");
+    if (d.ceka.pripomenout && d.ceka.pripomenout > d.termin) w.push("Připomenutí, že se máš ozvat (" + datumCz(d.ceka.pripomenout) + "), je až po termínu akce.");
   }
   return w;
 }
@@ -773,14 +856,36 @@ function sluc(intervaly) {
   return v;
 }
 
-function volnoDne(den) {
-  const okno = oknoPrace();
-  const busy = sluc(busyNaDen(den).map(function (b) {
-    return [Math.max(b.od, okno[0]), Math.min(b.do, okno[1])];
-  }).filter(function (i) { return i[1] > i[0]; }));
-  let obs = 0;
-  busy.forEach(function (i) { obs += i[1] - i[0]; });
-  return Math.max(0, okno[1] - okno[0] - obs);
+function typOblasti(o) { return o && !o.inbox && (o.typ === "prac" || o.typ === "soukr") ? o.typ : ""; }
+function jeVikend(den) { const d = parseKlic(den).getDay(); return d === 0 || d === 6; }
+function oknoDne() {
+  const p = oknoPrace();
+  return [Math.min(minuty(meta.den.od), p[0]), Math.max(minuty(meta.den.do), p[1])];
+}
+// Okna (od–do v minutách), kam smí akce daného typu ten den:
+// pracovní jen v pracovní době ve všední dny, soukromé mimo pracovní dobu (o víkendu celý den), Inbox kamkoli
+function oknaTypu(typ, den) {
+  const p = oknoPrace(), d = oknoDne();
+  let v;
+  if (typ === "prac") v = jeVikend(den) ? [] : [[p[0], p[1]]];
+  else if (typ === "soukr") v = jeVikend(den) ? [[d[0], d[1]]] : [[d[0], p[0]], [p[1], d[1]]];
+  else v = [[d[0], d[1]]];
+  return v.filter(function (i) { return i[1] > i[0]; });
+}
+function typPopis(typ) { return typ === "prac" ? "pracovní" : (typ === "soukr" ? "soukromé" : ""); }
+
+function volnoDne(den, typ) {
+  const busy = sluc(busyNaDen(den).map(function (b) { return [b.od, b.do]; }));
+  let volno = 0;
+  oknaTypu(typ || "", den).forEach(function (o) {
+    let v = o[1] - o[0];
+    busy.forEach(function (b) {
+      const od = Math.max(b[0], o[0]), dok = Math.min(b[1], o[1]);
+      if (dok > od) v -= dok - od;
+    });
+    volno += Math.max(0, v);
+  });
+  return volno;
 }
 
 // Akce, které je ten den potřeba udělat (bez hotových, čekajících a zablokovaných)
@@ -790,30 +895,39 @@ function akceDne(den) {
   });
 }
 
-function planDne(den, vynech) {
+// typ === undefined → všechny akce dne, jinak jen akce oblastí daného typu
+function planDne(den, vynech, typ) {
   let s = 0;
-  akceDne(den).forEach(function (x) { if (x.u !== vynech) s += trvani(x.u); });
+  akceDne(den).forEach(function (x) {
+    if (x.u === vynech) return;
+    if (typ !== undefined && typOblasti(x.o) !== typ) return;
+    s += trvani(x.u);
+  });
   return s;
 }
 
-// První volné místo v pracovní době (násobky 15 min), -1 když se nevejde
-function volnyCas(den, delka, odMin) {
-  const okno = oknoPrace();
-  let t = Math.ceil(Math.max(okno[0], odMin || 0) / 15) * 15;
+// První volné místo v oknech daného typu (násobky 15 min), -1 když se nevejde.
+// Nikdy se nekryje s jinou akcí s časem ani s obsazeností z Outlooku. Délku určuje volající (trvání akce).
+function volnyCas(den, delka, odMin, typ, vynech) {
   const obs = [];
-  akceDne(den).forEach(function (x) {
-    if (!x.u.zacatek) return;
+  polozkyNaDen(den, true).forEach(function (x) {
+    if (x.typ !== "akce" || x.u === vynech || !x.u.zacatek || jeHotovo(x.u, den)) return;
     const s = minuty(x.u.zacatek);
     obs.push([s, x.u.konec ? minuty(x.u.konec) : s + (x.u.odhad || 15)]);
   });
   busyNaDen(den).forEach(function (b) { obs.push([b.od, b.do]); });
   const m = sluc(obs);
-  for (let i = 0; i < m.length; i++) {
-    if (m[i][1] <= t) continue;
-    if (m[i][0] >= t + delka) break;
-    t = Math.ceil(m[i][1] / 15) * 15;
+  const okna = oknaTypu(typ || "", den);
+  for (let k = 0; k < okna.length; k++) {
+    let t = Math.ceil(Math.max(okna[k][0], odMin || 0) / 15) * 15;
+    for (let i = 0; i < m.length; i++) {
+      if (m[i][1] <= t) continue;
+      if (m[i][0] >= t + delka) break;
+      t = Math.ceil(m[i][1] / 15) * 15;
+    }
+    if (t + delka <= okna[k][1]) return t;
   }
-  return t + delka <= okno[1] ? t : -1;
+  return -1;
 }
 
 /* --- energie a tři nejdůležitější --- */
@@ -853,21 +967,25 @@ function porovnejKandidaty(a, b) {
   return sa - sb;
 }
 
-// Co lze na daný den naplánovat: bez termínu nebo po termínu nebo dnešní bez času
+// Co je potřeba na daný den umístit: akce v minulosti a akce bez přesného místa (bez termínu, nebo s datem bez času).
+// Zobrazují se vždy (bez ohledu na energii); čekající a zablokované jsou jen označené (znacky).
+// Opakované akce se sem nepočítají. vse = true přidá i akce, které už mají v ten den čas.
 function kandidatiPlanu(den, vse) {
   const v = [];
+  const dnes = dnesKlic(), nyni = nyniKlic();
   oblasti.forEach(function (o, i) {
     o.projekty.forEach(function (p, j) {
       p.ukoly.forEach(function (u) {
-        if (u.ceka || jeZablokovana(u)) return;
         if (jeOpak(u)) {
-          if (vse && vyskytujeSe(u, den) && !jeHotovo(u, den)) v.push({ typ: "akce", u: u, p: p, o: o, i: i, j: j, den: den });
+          if (vse && !u.hotovo && vyskytujeSe(u, den) && !jeHotovo(u, den)) v.push({ typ: "akce", u: u, p: p, o: o, i: i, j: j, den: den });
           return;
         }
         if (u.hotovo) return;
         if (u.termin && u.termin > den) return;
-        if (!vse && u.termin === den && u.zacatek) return;
-        if (!vse && !energieSedi(u)) return;
+        if (u.termin === den && u.zacatek && !vse) {
+          const uplynulo = den === dnes && (u.termin + " " + (u.konec || u.zacatek)) < nyni;
+          if (!uplynulo) return;
+        }
         v.push({ typ: "akce", u: u, p: p, o: o, i: i, j: j, den: u.termin || "" });
       });
     });
@@ -1246,7 +1364,7 @@ function kartaMit(den) {
       const b = el("button", "＋ Vyber důležitou věc", "flex:1;text-align:left", "btn");
       b.onclick = function () {
         otevriVyber("Nejdůležitější věc", kandidatiPlanu(den, true).concat(akceDne(den).filter(function (x) { return !jeOpak(x.u) && x.u.zacatek; })).filter(function (x, n, pole) {
-          return pole.findIndex(function (y) { return y.u === x.u; }) === n && !jeMit(x.u.id, den);
+          return pole.findIndex(function (y) { return y.u === x.u; }) === n && !jeMit(x.u.id, den) && !x.u.ceka && !jeZablokovana(x.u);
         }), function (x) { prepniMit(x.u, den); });
       };
       slot.appendChild(b);
@@ -1280,7 +1398,7 @@ function kartaUzaverka() {
       telo.appendChild(b);
     } else {
       const hotovo = polozkyNaDen(dnes, true).filter(function (x) { return x.typ === "akce" && jeHotovo(x.u, dnes); }).length;
-      const zbyva = kandidatiPlanu(dnes, true).filter(function (x) { return !jeOpak(x.u) && x.u.termin && x.u.termin <= dnes; });
+      const zbyva = kandidatiPlanu(dnes, true).filter(function (x) { return !jeOpak(x.u) && x.u.termin && x.u.termin <= dnes && !x.u.ceka && !jeZablokovana(x.u); });
       telo.appendChild(el("div", "Dnes hotovo: " + hotovo + " · nedokončeno: " + zbyva.length, "color:var(--sedy);margin-bottom:8px"));
       const pristiPo = pridejDny(pondeliTydne(dnes), 7);
       zbyva.slice(0, 8).forEach(function (x) {
@@ -1323,77 +1441,6 @@ function posunTermin(x, novy) {
   vykresli();
 }
 
-function vykresliPrehled() {
-  const box = document.getElementById("prehled");
-  box.innerHTML = "";
-  const dnes = dnesKlic();
-  const nyni = nyniKlic();
-  const konecTydne = pridejDny(pondeliTydne(dnes), 6);
-
-  // Po termínu: jednorázové akce a projekty (opakující se se sem nepočítají)
-  const po = [];
-  oblasti.forEach(function (o, i) {
-    o.projekty.forEach(function (p, j) {
-      if (filtrPriorita && p.priorita !== filtrPriorita) return;
-      p.ukoly.forEach(function (u) {
-        if (jeOpak(u) || u.hotovo || !u.termin) return;
-        if (u.termin + " " + (u.konec || u.zacatek || "23:59") < nyni) {
-          po.push({ typ: "akce", u: u, p: p, o: o, i: i, j: j, den: u.termin });
-        }
-      });
-      const pr = postup(p);
-      if (p.termin && p.termin < dnes && !(pr.n > 0 && pr.h === pr.n)) {
-        po.push({ typ: "projekt", p: p, o: o, i: i, j: j, den: p.termin });
-      }
-    });
-  });
-  po.sort(function (a, b) { return a.den < b.den ? -1 : (a.den > b.den ? 1 : 0); });
-
-  const dnesPol = polozkyNaDen(dnes).filter(function (x) {
-    return !(x.typ === "akce" && po.some(function (y) { return y.u === x.u; }));
-  });
-  const tyden = [];
-  for (let k = pridejDny(dnes, 1); k <= konecTydne; k = pridejDny(k, 1)) {
-    polozkyNaDen(k).forEach(function (x) { tyden.push(x); });
-  }
-
-  function sekce(titul, barvaTitulu, polozky, ukazDatum, prazdny, podtitul) {
-    const karta = el("div", "", "", "karta");
-    karta.appendChild(el("div", titul + (polozky.length ? " · " + polozky.length : ""),
-      "padding:14px 14px 8px;font-size:20px;font-weight:700;color:" + barvaTitulu));
-    if (podtitul) karta.appendChild(podtitul);
-    if (!polozky.length) karta.appendChild(el("div", prazdny, "padding:4px 14px 14px;color:var(--sedy2)"));
-    polozky.forEach(function (x) { karta.appendChild(radekPolozky(x, ukazDatum)); });
-    box.appendChild(karta);
-  }
-
-  // připomenutí: na koho čekám a už je čas se ozvat
-  const pripomenout = [];
-  oblasti.forEach(function (o, i) {
-    o.projekty.forEach(function (p, j) {
-      p.ukoly.forEach(function (u) {
-        if (u.ceka && !u.hotovo && u.ceka.pripomenout && u.ceka.pripomenout <= dnes) {
-          pripomenout.push({ typ: "akce", u: u, p: p, o: o, i: i, j: j, den: u.termin || "" });
-        }
-      });
-    });
-  });
-
-  box.appendChild(kartaMit(dnes));
-  if (poPraci()) box.appendChild(kartaUzaverka());
-  if (pripomenout.length) sekce("⏳ Ozvat se – čekám na", "var(--oranz)", pripomenout, true, "");
-  box.appendChild(kartaEnergie(true));
-  if (po.length) sekce("Po termínu", "var(--cerv)", po, true, "");
-
-  // kapacita dnešního dne
-  const planovano = planDne(dnes), volno = volnoDne(dnes);
-  const kap = el("div", planovano > volno ? "⚠️ " + fmtMin(planovano) + " naplánováno, volno jen " + fmtMin(volno) : fmtMin(planovano) + " naplánováno · " + fmtMin(volno) + " volno",
-    "padding:0 14px 8px;font-size:14px;color:" + (planovano > volno ? "var(--cerv)" : "var(--sedy)"));
-  sekce("Dnes · " + denNazev(dnes), "var(--text)", dnesPol, false, "Na dnešek nic nemáš. 🎉", kap);
-  sekce("Tento týden", "var(--text)", tyden, true, "Do neděle je volno.");
-  if (!poPraci()) box.appendChild(kartaUzaverka());
-}
-
 function vykresliVysledky() {
   const box = document.getElementById("vysledky");
   box.innerHTML = "";
@@ -1434,7 +1481,7 @@ function radekPolozky(x, ukazDatum) {
 
 // Přepne do seznamu a ukáže daný projekt
 function otevri(i, j) {
-  otevrena = oblasti[i];
+  if (otevrene.indexOf(oblasti[i]) === -1) otevrene.push(oblasti[i]);
   filtrPriorita = "";
   formProjekt = null;
   prejmenovani = null;
@@ -1466,10 +1513,7 @@ function prepinac(text, hodnota, zmena) {
 }
 
 function vykresliSeznam() {
-  if (oblasti.indexOf(otevrena) === -1) {
-    const prvni = oblasti.find(function (o) { return !o.inbox; });
-    otevrena = prvni || oblasti[0] || null;
-  }
+  otevrene = otevrene.filter(function (o) { return oblasti.indexOf(o) !== -1; });
   const box = document.getElementById("oblasti");
   box.innerHTML = "";
   if (oblasti.length === 0) {
@@ -1506,7 +1550,7 @@ function poleNazvu(obj, styl) {
 function kartaOblasti(o, i) {
   const karta = el("div", "", "", "karta");
   karta.id = "o-" + i;
-  const otevr = o === otevrena;
+  const otevr = otevrene.indexOf(o) !== -1;
 
   let vse = 0, hotove = 0;
   o.projekty.forEach(function (p) {
@@ -1518,17 +1562,20 @@ function kartaOblasti(o, i) {
   const hl = el("div", "", "background:" + o.barva + ";color:" + textBarva(o.barva), "hlavicka");
   hl.append(
     el("span", otevr ? "▾" : "▸", "font-size:18px;width:14px"),
-    el("span", o.nazev, "flex:1;font-size:20px;font-weight:700"),
+    el("span", (o.typ === "prac" ? "💼 " : (o.typ === "soukr" ? "🏠 " : "")) + o.nazev, "flex:1;font-size:20px;font-weight:700"),
     el("span", "✓ " + hotove + "/" + vse, "font-size:15px;opacity:.85")
   );
   hl.onclick = function () {
-    if (otevrena === o) return;
-    otevrena = o;
-    formProjekt = null;
-    prejmenovani = null;
+    const k = otevrene.indexOf(o);
+    if (k !== -1) {
+      otevrene.splice(k, 1);
+      if (formProjekt === o) formProjekt = null;
+      if (prejmenovani === o) prejmenovani = null;
+      vykresli();
+      return;
+    }
+    otevrene.push(o);
     vykresli();
-    const e = document.getElementById("o-" + i);
-    if (e) e.scrollIntoView({ block: "start" });
   };
   karta.appendChild(hl);
   if (!otevr) return karta;
@@ -1594,7 +1641,17 @@ function kartaOblasti(o, i) {
   cil.onchange = function () { o.cil = Math.max(0, Number(cil.value) || 0); uloz(); vykresli(); };
   r3.append(cil, el("span", "h", "color:var(--sedy)"));
   const r4 = el("div", "", "margin-top:10px");
-  r4.appendChild(prepinac("Pracovní oblast (hlídat pracovní dobu a víkendy)", o.pracovni, function (v) { o.pracovni = v; uloz(); }));
+  if (!o.inbox) {
+    r4.appendChild(el("div", "Typ oblasti – určuje, kdy se akce plánují", "color:var(--sedy);font-size:14px;margin-bottom:6px"));
+    const sg = el("div", "", "margin:0", "segment mala");
+    [["prac", "💼 Pracovní"], ["soukr", "🏠 Soukromá"]].forEach(function (x) {
+      const b = el("button", x[1], "", o.typ === x[0] ? "aktivni" : "");
+      b.onclick = function () { o.typ = x[0]; o.pracovni = x[0] === "prac"; uloz(); vykresli(); };
+      sg.appendChild(b);
+    });
+    r4.appendChild(sg);
+    r4.appendChild(el("div", o.typ === "prac" ? "Pracovní akce se plánují jen ve všední dny v pracovní době." : "Soukromé akce se plánují mimo pracovní dobu (o víkendu kdykoli).", "color:var(--sedy);font-size:13px"));
+  }
   const smazat = el("button", "Smazat oblast", "", "btn btn-cerv");
   smazat.onclick = function () {
     if (!confirm("Smazat oblast „" + o.nazev + "“ včetně všech projektů?")) return;
@@ -1954,14 +2011,21 @@ function vykresliEditor() {
     const prazdny = el("option", "— nic, akce je k dispozici hned —");
     prazdny.value = "";
     selZav.appendChild(prazdny);
-    const moznosti = editor.cilP.ukoly.filter(function (c) {
-      return c.id !== d.id && !jeOpak(c) && !zavisiNa(c, d.id);
-    });
+    const moznosti = editor.cilP.ukoly.filter(function (c) { return c.id !== d.id; });
     const stavajici = d.po ? najdiAkci(d.po) : null;
-    if (stavajici && moznosti.indexOf(stavajici.u) === -1) moznosti.push(stavajici.u);
+    if (stavajici && stavajici.u.id !== d.id && moznosti.indexOf(stavajici.u) === -1) moznosti.push(stavajici.u);
     moznosti.forEach(function (c) {
-      const op = el("option", c.text + (c.hotovo ? " ✓" : ""));
+      const znak = [];
+      const smycka = zavisiNa(c, d.id);
+      if (smycka) znak.push("⛔ smyčka");
+      if (jeOpak(c)) znak.push("🔁 opakovaná");
+      if (c.hotovo) znak.push("✓ hotová");
+      if (c.ceka) znak.push("⏳ čeká se na " + (c.ceka.kdo || "někoho"));
+      if (c.po && !smycka) znak.push("🔗 má vlastní předchůdce");
+      if (c.termin) znak.push(datumKratce(c.termin) + (c.zacatek ? " " + c.zacatek : ""));
+      const op = el("option", (smycka ? "⛔ " : (c.hotovo ? "✓ " : (c.ceka ? "⏳ " : (jeOpak(c) ? "🔁 " : "")))) + c.text + (znak.length ? "  (" + znak.join(", ") + ")" : ""));
       op.value = c.id;
+      if (smycka) op.disabled = true;
       selZav.appendChild(op);
     });
     selZav.value = d.po || "";
@@ -1970,7 +2034,7 @@ function vykresliEditor() {
   selZav.onchange = function () { d.po = selZav.value; };
   sel.addEventListener("change", naplnZavislost);
   p3c.appendChild(selZav);
-  p3c.appendChild(el("div", "Zvolená akce se v přehledu a plánu ukáže, až bude předchozí hotová.", "font-size:13px;color:var(--sedy);margin-top:6px"));
+  p3c.appendChild(el("div", "Vybrat lze kteroukoli akci projektu. Symboly: ✓ hotová · ⏳ čeká se na někoho · 🔁 opakovaná · ⛔ vytvořila by smyčku (nelze zvolit). Až bude předchozí akce hotová, odemkne se. Návaznost hlídá časy: když začíná dřív než předchozí akce skončí, aplikace upozorní.", "font-size:13px;color:var(--sedy);margin-top:6px"));
   tel.appendChild(p3c);
 
   // popis
@@ -2359,10 +2423,14 @@ function vykresliRozvrh(box, dny, opts) {
     for (let h = 1; h < 24; h++) {
       kol.appendChild(el("div", "", "position:absolute;left:0;right:0;top:" + (h * HODINA) + "px;border-top:.5px solid var(--cara2);pointer-events:none"));
     }
-    // mimo pracovní dobu je osa tmavší
+    // mimo pracovní dobu (a o víkendu celý den) je osa tmavší
     const okno = oknoPrace();
-    kol.appendChild(el("div", "", "position:absolute;left:0;right:0;top:0;height:" + (okno[0] * HODINA / 60) + "px;background:rgba(128,128,128,.10);pointer-events:none"));
-    kol.appendChild(el("div", "", "position:absolute;left:0;right:0;top:" + (okno[1] * HODINA / 60) + "px;bottom:0;background:rgba(128,128,128,.10);pointer-events:none"));
+    const stin = "background:rgba(128,128,128,.10);pointer-events:none";
+    if (jeVikend(k)) kol.appendChild(el("div", "", "position:absolute;left:0;right:0;top:0;bottom:0;" + stin));
+    else {
+      kol.appendChild(el("div", "", "position:absolute;left:0;right:0;top:0;height:" + (okno[0] * HODINA / 60) + "px;" + stin));
+      kol.appendChild(el("div", "", "position:absolute;left:0;right:0;top:" + (okno[1] * HODINA / 60) + "px;bottom:0;" + stin));
+    }
     // obsazeno v Outlooku
     busyNaDen(k).forEach(function (b) {
       kol.appendChild(el("div", "Outlook", "position:absolute;left:0;right:0;top:" + (b.od * HODINA / 60) + "px;height:" +
@@ -2404,25 +2472,40 @@ function vykresliRozvrh(box, dny, opts) {
 }
 
 /* =====================  PLÁN DNE  ===================== */
-function kartaKapacity(den) {
-  const planovano = planDne(den), volno = volnoDne(den), okno = oknoPrace();
-  const obsazeno = okno[1] - okno[0] - volno;
+function radekKapacity(karta, titul, den, typ) {
+  const t = typ || undefined;
+  const planovano = planDne(den, undefined, t), volno = volnoDne(den, typ);
   const pretizeno = planovano > volno;
   const barva = pretizeno ? "var(--cerv)" : (planovano > volno * 0.85 ? "var(--oranz)" : "var(--zel)");
-  const karta = el("div", "", "padding:14px", "karta");
-  karta.appendChild(el("div", "Kapacita dne", "", "popisek"));
-  karta.appendChild(el("div", fmtMin(planovano) + " naplánováno · " + fmtMin(volno) + " volno", "font-size:20px;font-weight:700;margin-bottom:8px;color:" + (pretizeno ? "var(--cerv)" : "var(--text)")));
+  const radek = el("div", "", "margin-bottom:10px");
+  radek.appendChild(el("div", titul + ": " + fmtMin(planovano) + " naplánováno · " + fmtMin(volno) + " volno", "font-size:17px;font-weight:700;margin-bottom:6px;color:" + (pretizeno ? "var(--cerv)" : "var(--text)")));
   const bar = el("div", "", "", "progress");
   const proc = volno ? Math.min(100, Math.round(planovano / volno * 100)) : (planovano ? 100 : 0);
   bar.appendChild(el("div", "", "width:" + proc + "%;background:" + barva));
-  karta.appendChild(bar);
-  const radky = ["Pracovní doba " + meta.prac.od + "–" + meta.prac.do + (obsazeno > 0 ? " · v Outlooku obsazeno " + fmtMin(obsazeno) : "")];
-  const bezOdhadu = akceDne(den).filter(function (x) { return trvani(x.u) === 0; }).length;
-  if (bezOdhadu) radky.push(bezOdhadu + " akcí bez odhadu – skutečná zátěž bude vyšší");
-  karta.appendChild(el("div", radky.join(" · "), "font-size:13px;color:var(--sedy);margin-top:6px"));
-  if (pretizeno) {
-    karta.appendChild(el("div", "⚠️ Přeplánováno o " + fmtMin(planovano - volno) + ". Něco přesuň na jiný den.", "font-size:14px;color:var(--cerv);margin-top:6px;font-weight:600"));
+  radek.appendChild(bar);
+  if (pretizeno) radek.appendChild(el("div", "⚠️ Přeplánováno o " + fmtMin(planovano - volno) + ". Něco přesuň na jiný den.", "font-size:14px;color:var(--cerv);margin-top:4px;font-weight:600"));
+  karta.appendChild(radek);
+}
+
+function kartaKapacity(den) {
+  const karta = el("div", "", "padding:14px", "karta");
+  karta.appendChild(el("div", "Kapacita dne", "", "popisek"));
+  const vik = jeVikend(den);
+  const info = [];
+  if (vik) {
+    info.push("Víkend – žádná pracovní doba");
+    radekKapacity(karta, "Soukromé", den, "soukr");
+    const prac = planDne(den, undefined, "prac");
+    if (prac > 0) karta.appendChild(el("div", "⚠️ Na víkend je naplánováno " + fmtMin(prac) + " pracovních akcí.", "font-size:14px;color:var(--cerv);font-weight:600;margin-bottom:8px"));
+  } else {
+    radekKapacity(karta, "Práce " + meta.prac.od + "–" + meta.prac.do, den, "prac");
+    radekKapacity(karta, "Soukromé (mimo práci)", den, "soukr");
+    const obs = (oknoPrace()[1] - oknoPrace()[0]) - volnoDne(den, "prac");
+    if (obs > 0) info.push("v Outlooku obsazeno " + fmtMin(obs));
   }
+  const bezOdhadu = akceDne(den).filter(function (x) { return trvani(x.u) === 0; }).length;
+  if (bezOdhadu) info.push(bezOdhadu + " akcí bez odhadu – skutečná zátěž bude vyšší");
+  if (info.length) karta.appendChild(el("div", info.join(" · "), "font-size:13px;color:var(--sedy)"));
   return karta;
 }
 
@@ -2430,8 +2513,8 @@ function radekTray(x, den) {
   const r = el("div", "", "display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:.5px solid var(--cara2);border-left:6px solid " + x.o.barva, "tah");
   const t = el("div", "", "flex:1;min-width:0");
   t.appendChild(el("div", (jeMit(x.u.id, den) ? "⭐ " : "") + x.u.text));
-  const sub = [x.o.inbox ? "Inbox" : x.o.nazev + " › " + x.p.nazev];
-  if (x.u.termin && x.u.termin < den) sub.push("po termínu " + datumKratce(x.u.termin));
+  const sub = [(typOblasti(x.o) === "prac" ? "💼 " : (typOblasti(x.o) === "soukr" ? "🏠 " : "")) + (x.o.inbox ? "Inbox" : x.o.nazev + " › " + x.p.nazev)];
+  if (x.u.termin && x.u.termin < den) sub.push("po termínu " + datumKratce(x.u.termin) + (x.u.zacatek ? " " + x.u.zacatek : ""));
   znacky(x.u).forEach(function (z) { sub.push(z); });
   t.appendChild(el("div", sub.join(" · "), "font-size:13px;color:var(--sedy2)"));
   r.append(t,
@@ -2451,7 +2534,7 @@ function kartaTray(den) {
   navrh.onclick = function () { navrhniPlan(den); };
   hl.appendChild(navrh);
   karta.appendChild(hl);
-  karta.appendChild(el("div", "Podrž a přetáhni na časovou osu, nebo klepni na ▶︎ (první volné místo). ☆ = jedna ze tří nejdůležitějších.", "padding:0 14px 8px;font-size:13px;color:var(--sedy)"));
+  karta.appendChild(el("div", "Akce z minulosti a akce bez přesného místa v tomto dni. Podrž a přetáhni na osu, nebo klepni na ▶︎ (první volné místo ve správné době: 💼 v pracovní, 🏠 mimo ni). ☆ = jedna ze tří nejdůležitějších. 🔒 čeká na jinou akci, ⏳ čeká se na někoho.", "padding:0 14px 8px;font-size:13px;color:var(--sedy)"));
   const seznam = el("div", "", "", "tray");
   if (!kand.length) seznam.appendChild(el("div", "Nic nečeká. 🎉", "padding:10px 14px 14px;color:var(--sedy2)"));
   kand.slice(0, 60).forEach(function (x) { seznam.appendChild(radekTray(x, den)); });
@@ -2460,12 +2543,24 @@ function kartaTray(den) {
   return karta;
 }
 
+// Nejdřívější možný začátek: nikdy v minulosti a ne dřív, než skončí předchozí akce
+function nejdrivZacatek(u, den, naplanovano) {
+  let od = 0;
+  if (den === dnesKlic()) { const t = new Date(); od = t.getHours() * 60 + t.getMinutes(); }
+  const n = u.po ? najdiAkci(u.po) : null;
+  if (n && !n.u.hotovo) {
+    const e = (naplanovano && naplanovano[n.u.id]) ? naplanovano[n.u.id] : konecAkce(n.u);
+    if (e.den === den && e.c) od = Math.max(od, minuty(e.c));
+  }
+  return od;
+}
+
 function naplanujDoVolna(x, den) {
-  const u = x.u;
-  const delka = u.odhad || 30;
-  const ted = new Date();
-  const t = volnyCas(den, delka, den === dnesKlic() ? ted.getHours() * 60 + ted.getMinutes() : 0);
-  if (t < 0) { alert("V pracovní době už není volný blok " + fmtMin(delka) + "."); return; }
+  const u = x.u, typ = typOblasti(x.o);
+  const delka = trvani(u) || 30;
+  if (typ === "prac" && jeVikend(den)) { alert("Pracovní akci nelze naplánovat na víkend. Vyber všední den."); return; }
+  const t = volnyCas(den, delka, nejdrivZacatek(u, den), typ, u);
+  if (t < 0) { alert("Pro tuto akci už není ten den volný blok " + fmtMin(delka) + (typ ? " " + (typ === "prac" ? "v pracovní době" : "mimo pracovní dobu") : "") + "."); return; }
   const d = JSON.parse(JSON.stringify(u));
   d.termin = den;
   d.zacatek = cas(t);
@@ -2476,33 +2571,54 @@ function naplanujDoVolna(x, den) {
   vykresli();
 }
 
-// Rozloží akce s odhadem do volných bloků dne (nejdřív tři nejdůležitější)
+// Rozloží akce z fronty do volných míst dne: pracovní do pracovní doby (jen všední dny), soukromé mimo ni,
+// nikdy se nekryjí, délka = délka akce (okno, jinak odhad, jinak 30 min). Nejdřív tři nejdůležitější
+// a předchozí akce před navazujícími. Čekající akce se nerozvrhují.
 function navrhniPlan(den) {
   const mit = mitDne(den);
-  const kand = kandidatiPlanu(den).filter(function (x) { return x.u.odhad > 0; });
+  let kand = kandidatiPlanu(den).filter(function (x) { return !x.u.ceka; });
   kand.sort(function (a, b) { return (mit.indexOf(b.u.id) !== -1 ? 1 : 0) - (mit.indexOf(a.u.id) !== -1 ? 1 : 0); });
-  if (!kand.length) { alert("Není co rozvrhnout. Navrhování používá akce, které mají odhad délky (⏱)."); return; }
-  if (!confirm("Rozvrhnout " + kand.length + " akcí s odhadem do volných míst v pracovní době?\n\nJde to vrátit tlačítkem Zpět.")) return;
-  const ted = new Date();
-  const odMin = den === dnesKlic() ? ted.getHours() * 60 + ted.getMinutes() : 0;
-  const zmeny = [];
-  let neveslo = 0;
-  kand.forEach(function (x) {
-    const t = volnyCas(den, x.u.odhad, odMin);
-    if (t < 0) { neveslo++; return; }
-    zmeny.push({ u: x.u, puv: { termin: x.u.termin, zacatek: x.u.zacatek, konec: x.u.konec } });
-    x.u.termin = den;
-    x.u.zacatek = cas(t);
-    x.u.konec = cas(t + x.u.odhad);
-  });
-  if (!zmeny.length) { alert("Do pracovní doby se nic nevešlo."); return; }
+  if (!kand.length) { alert("Není co rozvrhnout."); return; }
+  if (!confirm("Rozvrhnout " + kand.length + " akcí do volných míst dne?\n\nPracovní půjdou do pracovní doby (jen ve všední dny), soukromé mimo ni. Jde to vrátit tlačítkem Zpět.")) return;
+  const zmeny = [], naplanovano = {};
+  const nevesloPrac = [], nevesloJine = [];
+  let zbyva = kand.slice(), pokrok = true;
+  while (zbyva.length && pokrok) {
+    pokrok = false;
+    const dalsi = [];
+    zbyva.forEach(function (x) {
+      const u = x.u, typ = typOblasti(x.o);
+      const n = u.po ? najdiAkci(u.po) : null;
+      // předchozí akce, která je také ve frontě a ještě nemá místo, jde první
+      if (n && !n.u.hotovo && kand.some(function (y) { return y.u === n.u; }) && !naplanovano[n.u.id] && !n.u.ceka) { dalsi.push(x); return; }
+      pokrok = true;
+      if (n && !n.u.hotovo) {
+        const veFronte = kand.some(function (y) { return y.u === n.u; });
+        const casovy = !n.u.ceka && n.u.termin === den && n.u.zacatek;
+        if (!veFronte && !casovy) { nevesloJine.push(x); return; }   // předchozí akce není hotová ani umístěná dřív
+      }
+      if (typ === "prac" && jeVikend(den)) { nevesloPrac.push(x); return; }
+      const delka = trvani(u) || 30;
+      const t = volnyCas(den, delka, nejdrivZacatek(u, den, naplanovano), typ, u);
+      if (t < 0) { nevesloJine.push(x); return; }
+      zmeny.push({ u: u, puv: { termin: u.termin, zacatek: u.zacatek, konec: u.konec } });
+      u.termin = den;
+      u.zacatek = cas(t);
+      u.konec = cas(t + delka);
+      naplanovano[u.id] = { den: den, c: u.konec };
+    });
+    zbyva = dalsi;
+  }
+  nevesloJine.push.apply(nevesloJine, zbyva);
+  if (!zmeny.length) { alert(nevesloPrac.length && !nevesloJine.length ? "Na víkend se pracovní akce neplánují." : "Do volných míst se nic nevešlo."); return; }
   undoZasobnik.push({
     popis: "Návrh plánu",
     vrat: function () { zmeny.forEach(function (z) { z.u.termin = z.puv.termin; z.u.zacatek = z.puv.zacatek; z.u.konec = z.puv.konec; }); }
   });
   uloz();
   vykresli();
-  toast("Rozvrženo " + zmeny.length + " akcí" + (neveslo ? ", " + neveslo + " se nevešlo" : ""), true);
+  const zb = nevesloJine.length + nevesloPrac.length;
+  toast("Rozvrženo " + zmeny.length + " akcí" + (zb ? ", " + zb + " zůstává ve frontě" : ""), true);
 }
 
 function vykresliPlan() {
@@ -2520,6 +2636,26 @@ function vykresliPlan() {
   nav.append(zpet, el("div", denNazev(planDen), "flex:1;text-align:center;font-size:20px;font-weight:700"), dal, dnesBtn);
   box.appendChild(nav);
 
+  const dnesPlan = planDen === dnes;
+  if (dnesPlan) {
+    const pripomenout = [];
+    oblasti.forEach(function (o, i) {
+      o.projekty.forEach(function (p, j) {
+        p.ukoly.forEach(function (u) {
+          if (u.ceka && !u.hotovo && u.ceka.pripomenout && u.ceka.pripomenout <= dnes) {
+            pripomenout.push({ typ: "akce", u: u, p: p, o: o, i: i, j: j, den: u.termin || "" });
+          }
+        });
+      });
+    });
+    if (pripomenout.length) {
+      const kp = el("div", "", "", "karta");
+      kp.appendChild(el("div", "⏳ Ozvat se – čekám na · " + pripomenout.length, "padding:14px 14px 8px;font-size:20px;font-weight:700;color:var(--oranz)"));
+      pripomenout.forEach(function (x) { kp.appendChild(radekPolozky(x, true)); });
+      box.appendChild(kp);
+    }
+    if (poPraci()) box.appendChild(kartaUzaverka());
+  }
   box.appendChild(kartaKapacity(planDen));
   box.appendChild(kartaMit(planDen));
   box.appendChild(kartaEnergie(false));
@@ -2530,6 +2666,7 @@ function vykresliPlan() {
   vykresliRozvrh(pravy, [planDen], { plan: true, vyska: 520 });
   mrizka.appendChild(pravy);
   box.appendChild(mrizka);
+  if (dnesPlan && !poPraci()) box.appendChild(kartaUzaverka());
   nastavScroll();
 }
 
@@ -2690,7 +2827,7 @@ function vykresliRevize() {
     obal.appendChild(tl);
     k1.appendChild(obal);
   });
-  if (nestihlo.length > 15) k1.appendChild(el("div", "… a " + (nestihlo.length - 15) + " dalších (najdeš je v Přehledu)", "padding:8px 14px 12px;color:var(--sedy2)"));
+  if (nestihlo.length > 15) k1.appendChild(el("div", "… a " + (nestihlo.length - 15) + " dalších (najdeš je v Seznamu)", "padding:8px 14px 12px;color:var(--sedy2)"));
 
   // 2. projekty bez další akce
   const k2 = sekceRevize("2. Projekty bez další akce", bezAkce.length ? "var(--oranz)" : "var(--text)", bezAkce.length);
@@ -2814,7 +2951,7 @@ function importuj(text) {
   if (novaMeta) meta = novaMeta;
   if (noveSablony) sablony = noveSablony;
   normalizuj();
-  otevrena = null;
+  otevrene = [];
   formProjekt = null;
   formSablona = null;
   prejmenovani = null;
@@ -2822,7 +2959,7 @@ function importuj(text) {
   vykresliEditor();
   undoZasobnik = [{
     popis: "Import zálohy",
-    vrat: function () { oblasti = stare; meta = stareMeta; sablony = stareSablony; otevrena = null; ulozSablony(); }
+    vrat: function () { oblasti = stare; meta = stareMeta; sablony = stareSablony; otevrene = []; ulozSablony(); }
   }];
   ulozSablony();
   uloz();
@@ -2937,7 +3074,11 @@ function nactiSupabase() {
   });
 }
 
-async function cloudInit() {
+function cloudInit() {
+  cloud.init = cloudInit2();
+  return cloud.init;
+}
+async function cloudInit2() {
   const c = cloud.nastaveni;
   if (!c.url || !c.key) return;
   try {
@@ -2947,8 +3088,8 @@ async function cloudInit() {
       const novy = session && session.user ? session.user : null;
       const zmena = (novy ? novy.id : "") !== (cloud.uzivatel ? cloud.uzivatel.id : "");
       cloud.uzivatel = novy;
-      if (udalost === "INITIAL_SESSION" && !novy) setTimeout(nabidniPrihlaseni, 600);
-      if (zmena) {
+      const potvrzeno = uvodPriUdalosti(udalost, novy);
+      if (zmena || potvrzeno) {
         cloud.pozastaveno = false;
         if (novy) setTimeout(function () { cloudSync("auto"); }, 0);
         else cloudStav("");
@@ -2957,6 +3098,7 @@ async function cloudInit() {
     cloudStav("");
   } catch (e) {
     cloudStav("Chyba: " + (e.message || e));
+    uvodChyba(e.message || String(e));
   }
 }
 
@@ -2975,11 +3117,11 @@ function pouzijCloudData(d, vzdal) {
   meta.busy = busy;
   if (Array.isArray(d.sablony)) sablony = d.sablony;
   normalizuj();
-  otevrena = null; formProjekt = null; formSablona = null; prejmenovani = null; editor = null;
+  otevrene = []; formProjekt = null; formSablona = null; prejmenovani = null; editor = null;
   vykresliEditor();
   undoZasobnik = [{
     popis: "Data z cloudu",
-    vrat: function () { oblasti = stare; meta = stareMeta; sablony = stareSablony; otevrena = null; ulozSablony(); }
+    vrat: function () { oblasti = stare; meta = stareMeta; sablony = stareSablony; otevrene = []; ulozSablony(); }
   }];
   cloud.blok = true;
   uloz();
@@ -3011,6 +3153,7 @@ async function cloudStahni(vzdal) {
 // rezim: "auto" (rozhodne sama, před přepsáním se zeptá), "stahnout", "nahrat"
 async function cloudSync(rezim) {
   if (!cloud.klient || !cloud.uzivatel) return;
+  if (cloudNastaveno() && !platnyLogin() && !jeVRamci()) return;   // dokud není potvrzeno přihlášení, nesynchronizuje se
   if (cloud.bezi) { cloud.znovu = true; return; }
   cloud.bezi = true;
   try {
@@ -3059,44 +3202,78 @@ async function cloudPrihlas() {
     alert("Přihlášení přes Google nejde v rámečku (např. v náhledu CodePenu). Otevři aplikaci na vlastní adrese (GitHub Pages, Netlify) a přihlas se tam.");
     return;
   }
-  const r = await cloud.klient.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname } });
-  if (r && r.error) alert("Přihlášení se nepovedlo: " + r.error.message);
+  zapisLS("loginCekani", String(Date.now()));
+  const r = await cloud.klient.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname, queryParams: { prompt: "select_account" } } });
+  if (r && r.error) { alert("Přihlášení se nepovedlo: " + r.error.message); uvodChyba("Přihlášení se nepovedlo: " + r.error.message); }
 }
 
-// Při spuštění jednou za čas nabídne přihlášení přes Google (na každém zařízení zvlášť)
-function nabidniPrihlaseni() {
-  if (!cloud.klient || cloud.uzivatel || editor) return;
-  if (typeof window !== "undefined" && window.self !== window.top) return;
-  if (typeof location !== "undefined" && /access_token=|[?&]code=|error_description=/.test(location.hash + location.search)) return;
-  if (ctiLS("loginNeptat") === "1") return;
-  const naposledy = Number(ctiLS("loginDotaz")) || 0;
-  if (Date.now() - naposledy < LOGIN_ODSTUP_DNI * 86400000) return;
-  zapisLS("loginDotaz", String(Date.now()));
+/* ---------- ÚVODNÍ STRÁNKA: přihlášení přes Google ----------
+   Nové zařízení se musí přihlásit vždy, přihlášené zařízení znovu po LOGIN_PLATNOST_DNI dnech.
+   Pozor: jde o přihlašovací bránu aplikace; samotná data v cloudu chrání pravidla (RLS) v Supabase. */
+function jeVRamci() { try { return window.self !== window.top; } catch (e) { return true; } }
+function cloudNastaveno() { return !!(cloud.nastaveni.url && cloud.nastaveni.key); }
+function platnyLogin() {
+  const t = Number(ctiLS("loginPotvrzeno")) || 0;
+  return t > 0 && Date.now() - t < LOGIN_PLATNOST_DNI * 86400000;
+}
+function uvodViditelny() { return document.getElementById("uvod").className === "otevreno"; }
 
-  const s = document.getElementById("sheet");
-  s.innerHTML = "";
-  s.className = "otevreno";
-  const zavri = function () { s.className = ""; s.innerHTML = ""; };
-  s.onclick = function (e) { if (e.target === s) zavri(); };
-  const panel = el("div", "", "", "sheet-panel");
-  const tel = el("div", "", "padding:20px", "sheet-tel");
-  tel.appendChild(el("div", "Přihlásit se přes Google?", "font-size:22px;font-weight:700;margin-bottom:8px"));
-  tel.appendChild(el("div", "Úkoly se pak synchronizují mezi všemi tvými zařízeními. Bez přihlášení aplikace funguje dál jen v tomto prohlížeči. Zeptám se znovu nejdřív za " + LOGIN_ODSTUP_DNI + " dní.", "color:var(--sedy);margin-bottom:16px"));
-  const b1 = el("button", "Přihlásit přes Google", "display:block;width:100%;margin:0 0 8px", "btn-plny");
-  b1.onclick = function () { zavri(); cloudPrihlas(); };
-  const b2 = el("button", "Teď ne", "display:block;width:100%", "btn");
-  b2.onclick = zavri;
-  const b3 = el("button", "Už se neptat", "display:block;width:100%;color:var(--sedy)", "btn");
-  b3.onclick = function () { zapisLS("loginNeptat", "1"); zavri(); toast("Přihlášení najdeš kdykoli v ⚙︎", false); };
-  tel.append(b1, b2, b3);
-  panel.appendChild(tel);
-  s.appendChild(panel);
+function uvodZobraz(text, offline) {
+  document.getElementById("uvod").className = "otevreno";
+  document.getElementById("aplikace").style.display = "none";
+  document.getElementById("sheet").className = "";
+  if (text) document.getElementById("uvodText").textContent = text;
+  document.getElementById("uvodOffline").style.display = offline ? "block" : "none";
+}
+function uvodSkryj() {
+  document.getElementById("uvod").className = "";
+  document.getElementById("aplikace").style.display = "";
+  document.getElementById("uvodChyba").textContent = "";
+}
+function uvodChyba(text) {
+  if (!uvodViditelny()) return;
+  document.getElementById("uvodChyba").textContent = text;
+  document.getElementById("uvodOffline").style.display = "block";
+}
+
+function uvodPriUdalosti(udalost, uzivatel) {
+  let potvrzeno = false;
+  if (!cloudNastaveno()) return false;
+  const cekani = Number(ctiLS("loginCekani")) || 0;
+  if (uzivatel && cekani && Date.now() - cekani < 10 * 60000 && (udalost === "SIGNED_IN" || udalost === "INITIAL_SESSION")) {
+    zapisLS("loginPotvrzeno", String(Date.now()));
+    zapisLS("loginCekani", "");
+    potvrzeno = true;
+  }
+  if (udalost === "SIGNED_OUT") { zapisLS("loginPotvrzeno", ""); }
+  if (uzivatel && platnyLogin()) uvodSkryj();
+  else if (!uzivatel && udalost === "INITIAL_SESSION") uvodZobraz(platnyLogin() ? "Přihlášení vypršelo. Přihlas se prosím znovu přes Google." : "", false);
+  else if (udalost === "SIGNED_OUT") uvodZobraz("Odhlášeno. Pro vstup se přihlas přes Google.", false);
+  else if (uzivatel && !platnyLogin()) uvodZobraz("Pro další používání se přihlas znovu přes Google (jednou za " + LOGIN_PLATNOST_DNI + " dní).", false);
+  return potvrzeno;
+}
+
+function uvodStart() {
+  document.getElementById("uvodGoogle").onclick = async function () {
+    document.getElementById("uvodChyba").textContent = "";
+    if (cloud.init) { try { await cloud.init; } catch (e) {} }
+    if (!cloud.klient) { uvodChyba("Přihlášení teď nejde (chybí připojení k internetu?). Zkus to znovu."); return; }
+    cloudPrihlas();
+  };
+  document.getElementById("uvodOffline").onclick = function () { uvodSkryj(); };
+  if (!cloudNastaveno()) return;
+  if (jeVRamci()) { uvodZobraz("Aplikace běží v rámečku (např. náhled v CodePenu), kde se přihlášení přes Google provést nedá. Otevři ji na vlastní adrese.", true); return; }
+  if (platnyLogin()) return;
+  const vraceni = /access_token=|[?&]code=|error_description=/.test(location.hash + location.search);
+  uvodZobraz(vraceni ? "Dokončuji přihlášení…" : (ctiLS("loginPotvrzeno") ? "Uplynulo " + LOGIN_PLATNOST_DNI + " dní. Přihlas se prosím znovu přes Google." : "Vítej! Pro vstup do aplikace se přihlas přes Google."), false);
 }
 
 async function cloudOdhlas() {
   if (!cloud.klient) return;
+  zapisLS("loginPotvrzeno", "");
   await cloud.klient.auth.signOut();
   cloud.uzivatel = null;
+  uvodZobraz("Odhlášeno. Pro vstup se přihlas přes Google.", false);
   cloud.pozastaveno = false;
   cloudStav("");
 }
@@ -3151,12 +3328,6 @@ function kartaCloud() {
       r.appendChild(bSm);
     }
     k.appendChild(r);
-    const dotaz2 = el("div", "", "margin-top:10px");
-    dotaz2.appendChild(prepinac("Při spuštění nabídnout přihlášení (jednou za " + LOGIN_ODSTUP_DNI + " dní)", ctiLS("loginNeptat") !== "1", function (v) {
-      zapisLS("loginNeptat", v ? "0" : "1");
-      if (v) zapisLS("loginDotaz", "0");
-    }));
-    k.appendChild(dotaz2);
     if (cloud.stav) k.appendChild(el("div", cloud.stav, "font-size:14px;color:var(--cerv);margin-top:8px"));
   }
   return k;
@@ -3388,6 +3559,20 @@ function kartaPracovniDoba() {
   dok.onchange = uloz2;
   r.append(el("span", "od", "color:var(--sedy)"), od, el("span", "do", "color:var(--sedy)"), dok);
   k.appendChild(r);
+  k.appendChild(el("div", "Pracovní akce se plánují jen ve všední dny v této době. Víkend je bez pracovní doby.", "font-size:13px;color:var(--sedy);margin-top:8px"));
+  k.appendChild(el("div", "Den pro soukromé akce (mimo pracovní dobu)", "font-size:15px;color:var(--sedy);margin:12px 0 6px"));
+  const r2 = el("div", "", "display:flex;align-items:center;gap:8px;flex-wrap:wrap");
+  const dOd = casVyber(meta.den.od), dDo = casVyber(meta.den.do);
+  const uloz3 = function () {
+    if (!dOd.value || !dDo.value || dOd.value >= dDo.value) { alert("Konec dne musí být později než začátek."); dOd.value = meta.den.od; dDo.value = meta.den.do; return; }
+    meta.den = { od: dOd.value, do: dDo.value };
+    uloz();
+    toast("Soukromé akce " + dOd.value + "–" + dDo.value, false);
+  };
+  dOd.onchange = uloz3;
+  dDo.onchange = uloz3;
+  r2.append(el("span", "od", "color:var(--sedy)"), dOd, el("span", "do", "color:var(--sedy)"), dDo);
+  k.appendChild(r2);
   return k;
 }
 
@@ -3551,17 +3736,17 @@ function vykresliNastaveni() {
 /* =====================  VYKRESLENÍ A OVLÁDÁNÍ  ===================== */
 function vykresli() {
   const hledani = dotaz.trim() !== "";
-  const pohledy = { prehled: "prehledPohled", plan: "planPohled", inbox: "inboxPohled", seznam: "seznamPohled", kalendar: "kalendarPohled", revize: "revizePohled", nastaveni: "nastaveniPohled" };
-  const obsah = { prehled: "prehled", plan: "plan", inbox: "inbox", seznam: "oblasti", kalendar: "kalendar", revize: "revize", nastaveni: "nastaveni" };
+  const pohledy = { plan: "planPohled", inbox: "inboxPohled", seznam: "seznamPohled", kalendar: "kalendarPohled", revize: "revizePohled", nastaveni: "nastaveniPohled" };
+  const obsah = { plan: "plan", inbox: "inbox", seznam: "oblasti", kalendar: "kalendar", revize: "revize", nastaveni: "nastaveni" };
   Object.keys(pohledy).forEach(function (k) {
     const aktivni = !hledani && pohled === k;
     document.getElementById(pohledy[k]).style.display = aktivni ? "block" : "none";
     if (!aktivni) document.getElementById(obsah[k]).innerHTML = "";
   });
   document.getElementById("vysledky").style.display = hledani ? "block" : "none";
-  const sFiltrem = pohled === "prehled" || pohled === "seznam" || pohled === "kalendar";
+  const sFiltrem = pohled === "seznam" || pohled === "kalendar";
   document.getElementById("filtrBox").style.display = (!hledani && sFiltrem) ? "block" : "none";
-  [["btnPrehled", "prehled"], ["btnPlan", "plan"], ["btnInbox", "inbox"], ["btnSeznam", "seznam"], ["btnKalendar", "kalendar"], ["btnRevize", "revize"], ["btnNastaveni", "nastaveni"]].forEach(function (x) {
+  [["btnPlan", "plan"], ["btnInbox", "inbox"], ["btnSeznam", "seznam"], ["btnKalendar", "kalendar"], ["btnRevize", "revize"], ["btnNastaveni", "nastaveni"]].forEach(function (x) {
     document.getElementById(x[0]).className = (!hledani && pohled === x[1]) ? "aktivni" : "";
   });
   const nInbox = inboxProjekt().ukoly.filter(function (u) { return !u.hotovo; }).length;
@@ -3572,7 +3757,6 @@ function vykresli() {
 
   vykresliFiltr();
   if (hledani) vykresliVysledky();
-  else if (pohled === "prehled") vykresliPrehled();
   else if (pohled === "plan") vykresliPlan();
   else if (pohled === "inbox") vykresliInbox();
   else if (pohled === "seznam") vykresliSeznam();
@@ -3588,7 +3772,6 @@ function prepniZalozku(v) {
   vykresli();
 }
 
-document.getElementById("btnPrehled").addEventListener("click", function () { prepniZalozku("prehled"); });
 document.getElementById("btnPlan").addEventListener("click", function () { prepniZalozku("plan"); });
 document.getElementById("btnInbox").addEventListener("click", function () { prepniZalozku("inbox"); });
 document.getElementById("btnRevize").addEventListener("click", function () { prepniZalozku("revize"); });
@@ -3603,20 +3786,33 @@ document.getElementById("rychly").addEventListener("input", function (e) {
   document.getElementById("rychlyNahled").textContent = nahledZapisu(parsujZapis(e.target.value));
 });
 
+let novaTyp = "";
+function oznacNovouTyp() {
+  Array.prototype.forEach.call(document.querySelectorAll("#typNoveOblasti button"), function (b) {
+    b.className = b.getAttribute("data-typ") === novaTyp ? "aktivni" : "";
+  });
+}
+Array.prototype.forEach.call(document.querySelectorAll("#typNoveOblasti button"), function (b) {
+  b.addEventListener("click", function () { novaTyp = b.getAttribute("data-typ"); oznacNovouTyp(); });
+});
 document.getElementById("pridatOblast").addEventListener("click", function () {
   const nazev = document.getElementById("nazevOblasti");
   if (nazev.value.trim() === "") return;
+  if (!novaTyp) { alert("Nejdřív zaškrtni, zda je oblast pracovní, nebo soukromá."); return; }
   const nova = {
     nazev: nazev.value.trim(),
     barva: document.getElementById("barvaOblasti").value,
     cil: 0,
-    pracovni: false,
+    typ: novaTyp,
+    pracovni: novaTyp === "prac",
     inbox: false,
     projekty: []
   };
   oblasti.push(nova);
-  otevrena = nova;
+  otevrene.push(nova);
   nazev.value = "";
+  novaTyp = "";
+  oznacNovouTyp();
   uloz();
   vykresli();
 });
@@ -3624,8 +3820,8 @@ document.getElementById("pridatOblast").addEventListener("click", function () {
 normalizuj();
 pouzijTema();
 vykresli();
+uvodStart();
 cloudInit();
 </script>
 
-</body>
-</html>
+</body></html>
