@@ -184,10 +184,19 @@ let planDen = dnesKlic();     // den zobrazený v záložce Plán
 let formSablona = null;       // oblast, u které je otevřený formulář „projekt ze šablony“
 let uzaverkaOtevrena = null;  // null = podle času (po pracovní době se otevře sama)
 let nidCislo = 0;
-let cloud = { nastaveni: { url: "", key: "" }, klient: null, uzivatel: null, stav: "", verze: 0, bezi: false, znovu: false, timer: null, blok: false, pozastaveno: false };
+/* ---------- NASTAVENÍ SUPABASE: vlož své údaje mezi uvozovky (stačí jednou) ----------
+   Project URL a klíč „anon public“ najdeš v Supabase: Project Settings → API.
+   Klíč anon je určený pro veřejné stránky – data chrání pravidla (RLS) v databázi.
+   NIKDY sem nevkládej klíč service_role. */
+const CLOUD_URL = "";   // např. "https://abcdefgh.supabase.co"
+const CLOUD_KEY = "";   // dlouhý text začínající eyJ… nebo sb_publishable_…
+const CLOUD_ZAKODOVANO = !!(CLOUD_URL && CLOUD_KEY);
+const LOGIN_ODSTUP_DNI = 14;   // jak často se po „Teď ne“ znovu zeptat na přihlášení
+
+let cloud = { nastaveni: { url: CLOUD_URL, key: CLOUD_KEY }, klient: null, uzivatel: null, stav: "", verze: 0, bezi: false, znovu: false, timer: null, blok: false, pozastaveno: false };
 try {
   const c = JSON.parse(localStorage.getItem("cloud") || "null");
-  if (c && c.url && c.key) cloud.nastaveni = { url: String(c.url), key: String(c.key) };
+  if (!CLOUD_ZAKODOVANO && c && c.url && c.key) cloud.nastaveni = { url: String(c.url), key: String(c.key) };
 } catch (e) {}
 let meta = vychoziMeta();
 let sablony = [];
@@ -2938,6 +2947,7 @@ async function cloudInit() {
       const novy = session && session.user ? session.user : null;
       const zmena = (novy ? novy.id : "") !== (cloud.uzivatel ? cloud.uzivatel.id : "");
       cloud.uzivatel = novy;
+      if (udalost === "INITIAL_SESSION" && !novy) setTimeout(nabidniPrihlaseni, 600);
       if (zmena) {
         cloud.pozastaveno = false;
         if (novy) setTimeout(function () { cloudSync("auto"); }, 0);
@@ -3053,6 +3063,36 @@ async function cloudPrihlas() {
   if (r && r.error) alert("Přihlášení se nepovedlo: " + r.error.message);
 }
 
+// Při spuštění jednou za čas nabídne přihlášení přes Google (na každém zařízení zvlášť)
+function nabidniPrihlaseni() {
+  if (!cloud.klient || cloud.uzivatel || editor) return;
+  if (typeof window !== "undefined" && window.self !== window.top) return;
+  if (typeof location !== "undefined" && /access_token=|[?&]code=|error_description=/.test(location.hash + location.search)) return;
+  if (ctiLS("loginNeptat") === "1") return;
+  const naposledy = Number(ctiLS("loginDotaz")) || 0;
+  if (Date.now() - naposledy < LOGIN_ODSTUP_DNI * 86400000) return;
+  zapisLS("loginDotaz", String(Date.now()));
+
+  const s = document.getElementById("sheet");
+  s.innerHTML = "";
+  s.className = "otevreno";
+  const zavri = function () { s.className = ""; s.innerHTML = ""; };
+  s.onclick = function (e) { if (e.target === s) zavri(); };
+  const panel = el("div", "", "", "sheet-panel");
+  const tel = el("div", "", "padding:20px", "sheet-tel");
+  tel.appendChild(el("div", "Přihlásit se přes Google?", "font-size:22px;font-weight:700;margin-bottom:8px"));
+  tel.appendChild(el("div", "Úkoly se pak synchronizují mezi všemi tvými zařízeními. Bez přihlášení aplikace funguje dál jen v tomto prohlížeči. Zeptám se znovu nejdřív za " + LOGIN_ODSTUP_DNI + " dní.", "color:var(--sedy);margin-bottom:16px"));
+  const b1 = el("button", "Přihlásit přes Google", "display:block;width:100%;margin:0 0 8px", "btn-plny");
+  b1.onclick = function () { zavri(); cloudPrihlas(); };
+  const b2 = el("button", "Teď ne", "display:block;width:100%", "btn");
+  b2.onclick = zavri;
+  const b3 = el("button", "Už se neptat", "display:block;width:100%;color:var(--sedy)", "btn");
+  b3.onclick = function () { zapisLS("loginNeptat", "1"); zavri(); toast("Přihlášení najdeš kdykoli v ⚙︎", false); };
+  tel.append(b1, b2, b3);
+  panel.appendChild(tel);
+  s.appendChild(panel);
+}
+
 async function cloudOdhlas() {
   if (!cloud.klient) return;
   await cloud.klient.auth.signOut();
@@ -3087,7 +3127,8 @@ function kartaCloud() {
     const key = el("input", "", "font-size:15px", "pole");
     key.placeholder = "anon public klíč";
     key.value = cloud.nastaveni.key;
-    k.append(url, key);
+    if (CLOUD_ZAKODOVANO) k.appendChild(el("div", "Údaje o Supabase jsou uložené přímo v aplikaci.", "font-size:14px;color:var(--sedy);margin-bottom:8px"));
+    else k.append(url, key);
     const r = el("div", "", "display:flex;flex-wrap:wrap;gap:6px;align-items:center");
     const bUloz = el("button", "Uložit údaje", "margin:0", "btn-plny");
     bUloz.onclick = function () {
@@ -3098,18 +3139,24 @@ function kartaCloud() {
       cloud.klient = null;
       cloudInit().then(function () { vykresli(); });
     };
-    r.appendChild(bUloz);
+    if (!CLOUD_ZAKODOVANO) r.appendChild(bUloz);
     if (cloud.klient) {
       const bG = el("button", "Přihlásit přes Google", "margin:0", "btn-plny");
       bG.onclick = cloudPrihlas;
       r.appendChild(bG);
     }
-    if (cloud.nastaveni.url) {
+    if (cloud.nastaveni.url && !CLOUD_ZAKODOVANO) {
       const bSm = el("button", "Smazat údaje", "", "btn btn-cerv");
       bSm.onclick = function () { zapisLS("cloud", ""); cloud.nastaveni = { url: "", key: "" }; cloud.klient = null; cloud.stav = ""; vykresli(); };
       r.appendChild(bSm);
     }
     k.appendChild(r);
+    const dotaz2 = el("div", "", "margin-top:10px");
+    dotaz2.appendChild(prepinac("Při spuštění nabídnout přihlášení (jednou za " + LOGIN_ODSTUP_DNI + " dní)", ctiLS("loginNeptat") !== "1", function (v) {
+      zapisLS("loginNeptat", v ? "0" : "1");
+      if (v) zapisLS("loginDotaz", "0");
+    }));
+    k.appendChild(dotaz2);
     if (cloud.stav) k.appendChild(el("div", cloud.stav, "font-size:14px;color:var(--cerv);margin-top:8px"));
   }
   return k;
