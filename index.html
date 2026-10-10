@@ -188,8 +188,8 @@ let nidCislo = 0;
    Project URL a klíč „anon public“ najdeš v Supabase: Project Settings → API.
    Klíč anon je určený pro veřejné stránky – data chrání pravidla (RLS) v databázi.
    NIKDY sem nevkládej klíč service_role. */
-const CLOUD_URL = "";   // např. "https://abcdefgh.supabase.co"
-const CLOUD_KEY = "";   // dlouhý text začínající eyJ… nebo sb_publishable_…
+const CLOUD_URL = "https://kcsabnmquomreypzscpy.supabase.co";   // např. "https://abcdefgh.supabase.co"
+const CLOUD_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtjc2Fibm1xdW9tcmV5cHpzY3B5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NDA4NDcsImV4cCI6MjEwNzIxNjg0N30.Is4TVQpBVXFFDiRScu4Kd1drPe7DquiFKcdYYOK0q8Q";   // dlouhý text začínající eyJ… nebo sb_publishable_…
 const CLOUD_ZAKODOVANO = !!(CLOUD_URL && CLOUD_KEY);
 const LOGIN_ODSTUP_DNI = 14;   // jak často se po „Teď ne“ znovu zeptat na přihlášení
 
