@@ -72,7 +72,19 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 50%; }
 
 #uvod { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg); z-index: 3000; align-items: center; justify-content: center; padding: 20px; overflow-y: auto; }
 #uvod.otevreno { display: flex; }
-.uvod-box { width: 100%; max-width: 380px; text-align: center; }
+#uvod { align-items: flex-start; background: linear-gradient(180deg, rgba(0,122,255,.14), var(--bg) 360px); }
+.uvod-box { width: 100%; max-width: 560px; margin: auto; padding: 24px 0 36px; text-align: center; }
+.uvod-logo { width: 84px; height: 84px; margin: 0 auto 14px; border-radius: 22px; background: linear-gradient(135deg, #0a84ff, #34c759); color: #fff; font-size: 52px; line-height: 84px; font-weight: 700; box-shadow: 0 8px 24px rgba(0,122,255,.35); }
+.uvod-nadpis { font-size: 40px; margin: 0 0 8px; }
+.uvod-podnadpis { color: var(--sedy); font-size: 18px; line-height: 1.4; margin: 0 auto 24px; max-width: 440px; }
+.uvod-funkce { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; text-align: left; margin-bottom: 24px; }
+.uvod-funkce div { background: var(--karta); border-radius: 14px; padding: 12px 14px; box-shadow: var(--stin); }
+.uvod-funkce b { display: block; font-size: 16px; margin-bottom: 3px; }
+.uvod-funkce span { color: var(--sedy); font-size: 14px; line-height: 1.35; }
+.uvod-stav { color: var(--sedy); font-size: 15px; margin-bottom: 12px; }
+.uvod-hlavni { display: block; width: 100%; margin: 0 0 10px; font-size: 18px; padding: 14px; }
+.uvod-vedlejsi { display: block; width: 100%; border: none; background: var(--karta); color: var(--akcent); font-size: 17px; font-weight: 600; padding: 14px; border-radius: 12px; box-shadow: var(--stin); }
+.uvod-drobne { color: var(--sedy2); font-size: 13px; line-height: 1.4; margin-top: 12px; }
 #sheet { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.45); z-index: 1000; align-items: flex-end; justify-content: center; }
 #sheet.otevreno { display: flex; }
 .sheet-panel { background: var(--bg); width: 100%; max-width: 620px; max-height: 92vh; overflow-y: auto; border-radius: 16px 16px 0 0; -webkit-overflow-scrolling: touch; }
@@ -155,11 +167,21 @@ input[type=color]::-webkit-color-swatch { border: none; border-radius: 50%; }
 
 <div id="uvod">
   <div class="uvod-box">
-    <div style="font-size:56px;line-height:1">✅</div>
-    <h1 style="margin:10px 0 6px">Moje úkoly</h1>
-    <div id="uvodText" style="color:var(--sedy);margin-bottom:22px">Pro vstup do aplikace se přihlas přes Google.</div>
-    <button id="uvodGoogle" class="btn-plny" style="display:block;width:100%;margin:0 0 10px;font-size:18px;padding:14px">Přihlásit přes Google</button>
-    <button id="uvodOffline" class="btn" style="display:none;width:100%;color:var(--sedy)">Pokračovat bez přihlášení (jen v tomto zařízení)</button>
+    <div class="uvod-logo">✓</div>
+    <h1 class="uvod-nadpis">Moje úkoly</h1>
+    <div class="uvod-podnadpis">Osobní plánovač, který ti pomůže zvládnout práci i soukromí – bez chaosu a bez přetížení.</div>
+    <div class="uvod-funkce">
+      <div><b>📅 Plán dne</b><span>Časová osa, tři nejdůležitější věci a hlídání kapacity dne.</span></div>
+      <div><b>🗂 Oblasti › projekty › akce</b><span>Přehledná struktura, priority, termíny a procento dokončení.</span></div>
+      <div><b>💼 Práce × 🏠 soukromí</b><span>Pracovní akce se plánují do pracovní doby ve všední dny, soukromé mimo ni.</span></div>
+      <div><b>🔗 Logické návaznosti</b><span>Akce na sobě závisí a aplikace upozorní, když časy nedávají smysl.</span></div>
+      <div><b>📧 Outlook</b><span>Načtení obsazených časů a export akcí do kalendáře.</span></div>
+      <div><b>☁️ Na všech zařízeních</b><span>Po přihlášení přes Google se úkoly synchronizují mezi iPadem, telefonem i počítačem.</span></div>
+    </div>
+    <div id="uvodText" class="uvod-stav">Pro synchronizaci se přihlas přes Google.</div>
+    <button id="uvodGoogle" class="btn-plny uvod-hlavni">Přihlásit přes Google</button>
+    <button id="uvodOffline" class="uvod-vedlejsi">Vstoupit bez přihlášení</button>
+    <div class="uvod-drobne">Bez přihlášení se úkoly ukládají jen v tomto prohlížeči a do cloudu se nesynchronizují. Přihlásit se můžeš kdykoli později v Nastavení.</div>
     <div id="uvodChyba" style="color:var(--cerv);font-size:14px;margin-top:10px"></div>
   </div>
 </div>
@@ -1022,6 +1044,7 @@ function zavriVyber() {
   const s = document.getElementById("sheet");
   s.className = "";
   s.innerHTML = "";
+  cloudPoZavreni();
 }
 
 /* =====================  RYCHLÝ ZÁPIS (CHYTRÉ ZADÁNÍ)  ===================== */
@@ -1804,6 +1827,7 @@ function otevriEditor(u, p) {
 function zavriEditor() {
   editor = null;
   vykresliEditor();
+  cloudPoZavreni();
 }
 
 function ulozEditor() {
@@ -3048,9 +3072,52 @@ function cCas(x) { return new Date(x).toLocaleString("cs-CZ"); }
 function klicSync() { return "cloudSync-" + (cloud.uzivatel ? cloud.uzivatel.id : ""); }
 
 function cloudStav(text) {
+  if (cloud.stav === text) return;
   cloud.stav = text;
-  if (pohled === "nastaveni" && dotaz.trim() === "") vykresli();
+  const a = document.activeElement;
+  const pise = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);   // nepřekreslovat, když zrovna něco píšeš
+  if (pohled === "nastaveni" && dotaz.trim() === "" && !pise) vykresli();
 }
+
+/* ---------- automatická synchronizace při používání ----------
+   1) živé změny ze Supabase Realtime, 2) kontrola při návratu do aplikace a po obnovení sítě,
+   3) záloha: kontrola jednou za minutu. Vlastní logiku „co přepsat“ má cloudSync("auto"). */
+function cloudKontrola() {
+  if (!cloud.klient || !cloud.uzivatel || cloud.pozastaveno || cloud.blok) return;
+  if (lokalniRezim() || (cloudNastaveno() && !platnyLogin() && !jeVRamci())) return;
+  // uprostřed úprav nic nestahovat – počká se na zavření okna
+  if (editor || document.getElementById("sheet").className === "otevreno") { cloud.odlozeno = true; return; }
+  cloud.odlozeno = false;
+  cloud.tichy = true;
+  cloudSync("auto");
+}
+function cloudPoZavreni() {
+  if (cloud.odlozeno) { cloud.odlozeno = false; setTimeout(cloudKontrola, 400); }
+}
+function cloudOdber() {
+  if (cloud.kanal || !cloud.klient || !cloud.uzivatel || typeof cloud.klient.channel !== "function") return;
+  try {
+    const id = cloud.uzivatel.id;
+    cloud.kanal = cloud.klient.channel("ukolnicek-" + id)
+      .on("postgres_changes", { event: "*", schema: "public", table: "ukolnicek", filter: "user_id=eq." + id }, function () {
+        clearTimeout(cloud.timerZmena);
+        cloud.timerZmena = setTimeout(cloudKontrola, 600);
+      })
+      .subscribe(function (stav) {
+        cloud.zivy = stav === "SUBSCRIBED";
+        if (pohled === "nastaveni" && dotaz.trim() === "" && !cloud.stavZivy) { cloud.stavZivy = true; setTimeout(function () { cloud.stavZivy = false; const a = document.activeElement; if (!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) vykresli(); }, 300); }
+      });
+  } catch (e) { cloud.kanal = null; }
+}
+function cloudOdberZrus() {
+  try { if (cloud.kanal && cloud.klient) cloud.klient.removeChannel(cloud.kanal); } catch (e) {}
+  cloud.kanal = null;
+  cloud.zivy = false;
+}
+document.addEventListener("visibilitychange", function () { if (!document.hidden) cloudKontrola(); });
+window.addEventListener("online", cloudKontrola);
+window.addEventListener("focus", cloudKontrola);
+setInterval(function () { if (!document.hidden) cloudKontrola(); }, 60000);
 
 // Do cloudu jdou úkoly, šablony a nastavení. Obsazenost z Outlooku zůstává jen v zařízení.
 function cloudData() {
@@ -3089,6 +3156,8 @@ async function cloudInit2() {
       const zmena = (novy ? novy.id : "") !== (cloud.uzivatel ? cloud.uzivatel.id : "");
       cloud.uzivatel = novy;
       const potvrzeno = uvodPriUdalosti(udalost, novy);
+      if (novy && (potvrzeno || platnyLogin())) cloudOdber();
+      else if (!novy) cloudOdberZrus();
       if (zmena || potvrzeno) {
         cloud.pozastaveno = false;
         if (novy) setTimeout(function () { cloudSync("auto"); }, 0);
@@ -3147,17 +3216,19 @@ async function cloudStahni(vzdal) {
   if (r.error) throw r.error;
   if (!r.data) throw new Error("V cloudu zatím nic není.");
   pouzijCloudData(r.data.data, r.data.updated_at || vzdal);
-  toast("Data stažena z cloudu", true);
+  toast("Data aktualizována z cloudu", true);
 }
 
 // rezim: "auto" (rozhodne sama, před přepsáním se zeptá), "stahnout", "nahrat"
 async function cloudSync(rezim) {
   if (!cloud.klient || !cloud.uzivatel) return;
-  if (cloudNastaveno() && !platnyLogin() && !jeVRamci()) return;   // dokud není potvrzeno přihlášení, nesynchronizuje se
+  if (lokalniRezim() || (cloudNastaveno() && !platnyLogin() && !jeVRamci())) return;   // dokud není potvrzeno přihlášení, nesynchronizuje se
   if (cloud.bezi) { cloud.znovu = true; return; }
   cloud.bezi = true;
+  const tichy = cloud.tichy;
+  cloud.tichy = false;
   try {
-    cloudStav("Synchronizuji…");
+    if (!tichy) cloudStav("Synchronizuji…");
     const r = await cloud.klient.from("ukolnicek").select("updated_at").eq("user_id", cloud.uzivatel.id).maybeSingle();
     if (r.error) throw r.error;
     const vzdal = r.data ? r.data.updated_at : "";
@@ -3203,6 +3274,7 @@ async function cloudPrihlas() {
     return;
   }
   zapisLS("loginCekani", String(Date.now()));
+  zapisLS("lokalni", "");
   const r = await cloud.klient.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname, queryParams: { prompt: "select_account" } } });
   if (r && r.error) { alert("Přihlášení se nepovedlo: " + r.error.message); uvodChyba("Přihlášení se nepovedlo: " + r.error.message); }
 }
@@ -3212,6 +3284,7 @@ async function cloudPrihlas() {
    Pozor: jde o přihlašovací bránu aplikace; samotná data v cloudu chrání pravidla (RLS) v Supabase. */
 function jeVRamci() { try { return window.self !== window.top; } catch (e) { return true; } }
 function cloudNastaveno() { return !!(cloud.nastaveni.url && cloud.nastaveni.key); }
+function lokalniRezim() { return ctiLS("lokalni") === "1"; }
 function platnyLogin() {
   const t = Number(ctiLS("loginPotvrzeno")) || 0;
   return t > 0 && Date.now() - t < LOGIN_PLATNOST_DNI * 86400000;
@@ -3223,7 +3296,6 @@ function uvodZobraz(text, offline) {
   document.getElementById("aplikace").style.display = "none";
   document.getElementById("sheet").className = "";
   if (text) document.getElementById("uvodText").textContent = text;
-  document.getElementById("uvodOffline").style.display = offline ? "block" : "none";
 }
 function uvodSkryj() {
   document.getElementById("uvod").className = "";
@@ -3233,7 +3305,6 @@ function uvodSkryj() {
 function uvodChyba(text) {
   if (!uvodViditelny()) return;
   document.getElementById("uvodChyba").textContent = text;
-  document.getElementById("uvodOffline").style.display = "block";
 }
 
 function uvodPriUdalosti(udalost, uzivatel) {
@@ -3247,8 +3318,8 @@ function uvodPriUdalosti(udalost, uzivatel) {
   }
   if (udalost === "SIGNED_OUT") { zapisLS("loginPotvrzeno", ""); }
   if (uzivatel && platnyLogin()) uvodSkryj();
-  else if (!uzivatel && udalost === "INITIAL_SESSION") uvodZobraz(platnyLogin() ? "Přihlášení vypršelo. Přihlas se prosím znovu přes Google." : "", false);
-  else if (udalost === "SIGNED_OUT") uvodZobraz("Odhlášeno. Pro vstup se přihlas přes Google.", false);
+  else if (!uzivatel && udalost === "INITIAL_SESSION" && !lokalniRezim()) uvodZobraz(platnyLogin() ? "Přihlášení vypršelo. Přihlas se prosím znovu přes Google." : "", false);
+  else if (udalost === "SIGNED_OUT" && !lokalniRezim()) uvodZobraz("Odhlášeno. Pro vstup se přihlas přes Google.", false);
   else if (uzivatel && !platnyLogin()) uvodZobraz("Pro další používání se přihlas znovu přes Google (jednou za " + LOGIN_PLATNOST_DNI + " dní).", false);
   return potvrzeno;
 }
@@ -3260,17 +3331,18 @@ function uvodStart() {
     if (!cloud.klient) { uvodChyba("Přihlášení teď nejde (chybí připojení k internetu?). Zkus to znovu."); return; }
     cloudPrihlas();
   };
-  document.getElementById("uvodOffline").onclick = function () { uvodSkryj(); };
+  document.getElementById("uvodOffline").onclick = function () { zapisLS("lokalni", "1"); uvodSkryj(); };
   if (!cloudNastaveno()) return;
   if (jeVRamci()) { uvodZobraz("Aplikace běží v rámečku (např. náhled v CodePenu), kde se přihlášení přes Google provést nedá. Otevři ji na vlastní adrese.", true); return; }
-  if (platnyLogin()) return;
+  if (platnyLogin() || lokalniRezim()) return;
   const vraceni = /access_token=|[?&]code=|error_description=/.test(location.hash + location.search);
-  uvodZobraz(vraceni ? "Dokončuji přihlášení…" : (ctiLS("loginPotvrzeno") ? "Uplynulo " + LOGIN_PLATNOST_DNI + " dní. Přihlas se prosím znovu přes Google." : "Vítej! Pro vstup do aplikace se přihlas přes Google."), false);
+  uvodZobraz(vraceni ? "Dokončuji přihlášení…" : (ctiLS("loginPotvrzeno") ? "Uplynulo " + LOGIN_PLATNOST_DNI + " dní. Přihlas se prosím znovu přes Google." : "Přihlas se přes Google a úkoly budeš mít na všech zařízeních."), false);
 }
 
 async function cloudOdhlas() {
   if (!cloud.klient) return;
   zapisLS("loginPotvrzeno", "");
+  zapisLS("lokalni", "");
   await cloud.klient.auth.signOut();
   cloud.uzivatel = null;
   uvodZobraz("Odhlášeno. Pro vstup se přihlas přes Google.", false);
@@ -3295,6 +3367,7 @@ function kartaCloud() {
     b4.onclick = cloudOdhlas;
     r.append(b1, b2, b3, b4);
     k.appendChild(r);
+    k.appendChild(el("div", (cloud.zivy ? "⚡ Živé aktualizace běží" : "Živé aktualizace nejsou aktivní") + " · změny z druhého zařízení se načtou i při návratu do aplikace a jednou za minutu.", "font-size:13px;color:var(--sedy);margin-bottom:8px"));
     k.appendChild(el("div", "Ukládá se do prohlížeče i do cloudu. Když se verze na zařízeních liší, aplikace se před přepsáním zeptá. Obsazenost z Outlooku se do cloudu neposílá.", "font-size:13px;color:var(--sedy);margin-top:10px"));
   } else {
     k.appendChild(el("div", "Bez přihlášení aplikace funguje jen lokálně v tomto prohlížeči. Údaje najdeš v Supabase: Project Settings → API.", "font-size:14px;color:var(--sedy);margin-bottom:10px"));
